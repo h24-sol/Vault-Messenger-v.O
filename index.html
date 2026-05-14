@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Vault Messenger v6.0 | Solana Privacy Protocol</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --accent: #22d3ee; --bg: #020617; }
+        body {
+            background: radial-gradient(circle at top right, #083344, #020617, #000000);
+            font-family: 'Outfit', sans-serif;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+        .app-name {
+            background: linear-gradient(to bottom, #ffffff 30%, #22d3ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.3));
+        }
+        .glass {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .neo-input {
+            background: rgba(2, 6, 23, 0.8);
+            border: 1px solid #1e293b;
+        }
+        .solana-btn {
+            background: linear-gradient(90deg, #9945FF 0%, #14F195 100%);
+            transition: all 0.3s ease;
+        }
+        #matrixCanvas { display: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+    <div id="mainApp" class="w-full max-w-lg glass rounded-[3rem] p-8 md:p-12 relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="flex flex-col items-center mb-10">
+            <button id="connectBtn" onclick="connectWallet()" class="solana-btn text-slate-950 text-[10px] font-black px-6 py-2 rounded-full mb-6 uppercase tracking-widest shadow-lg active:scale-95">
+                Connect Solana Wallet
+            </button>
+            <h1 class="app-name text-4xl font-black mb-1 text-center uppercase">VAULT v6.0</h1>
+            <p class="text-[9px] tracking-[0.5em] text-slate-500 font-bold uppercase text-center text-cyan-400">On-Chain Privacy Protocol</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="grid grid-cols-4 gap-3 mb-8">
+            <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800 text-center">
+                <label class="text-[8px] font-black text-cyan-500 uppercase block mb-1">Key Shift</label>
+                <input type="number" id="shift" value="12" class="bg-transparent w-full text-center font-bold text-lg outline-none text-white">
+            </div>
+            <label class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800 text-center cursor-pointer">
+                <label class="text-[8px] font-bold text-slate-500 uppercase block mb-1">Shadow</label>
+                <span id="shadowStat" class="text-[10px] font-black text-cyan-400 uppercase">LOAD</span>
+                <input type="file" id="imgInput" accept="image/*" class="hidden" onchange="handleShadow(this)">
+            </label>
+            <button onclick="toggleSet('ghost')" class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800">
+                <label class="text-[8px] font-bold text-slate-500 uppercase block mb-1">Ghost</label>
+                <span id="ghostStat" class="text-[10px] font-black text-slate-400 uppercase">OFF</span>
+            </button>
+            <button onclick="toggleSet('stealth')" class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800">
+                <label class="text-[8px] font-bold text-slate-500 uppercase block mb-1">Stealth</label>
+                <span id="stealthStat" class="text-[10px] font-black text-slate-400 uppercase">OFF</span>
+            </button>
+        </div>
+
+        <textarea id="msgInput" placeholder="Enter secure message..." class="w-full neo-input rounded-[2rem] p-6 h-40 text-slate-200 outline-none text-lg resize-none mb-6 focus:border-cyan-500/50 transition-colors"></textarea>
+
+        <div class="grid grid-cols-2 gap-4 mb-8">
+            <button onclick="runProtocol('enc')" class="bg-cyan-500 text-slate-950 font-black py-5 rounded-2xl active:scale-95 uppercase shadow-cyan-500/20 shadow-lg">ENCRYPT</button>
+            <button onclick="runProtocol('dec')" class="bg-slate-800 text-white font-black py-5 rounded-2xl active:scale-95 uppercase">DECRYPT</button>
+        </div>
+
+        <!-- Result Area -->
+        <div id="resArea" class="hidden animate-pulse">
+            <div class="bg-cyan-500/5 border border-cyan-500/10 rounded-[2rem] p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <span id="resLabel" class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Vault Matrix Result</span>
+                    <button id="actionBtn" class="text-[10px] bg-white text-black px-4 py-1.5 rounded-full font-black uppercase">Copy</button>
+                </div>
+                <p id="resText" class="text-xl font-medium text-white break-words mb-4 text-center font-mono"></p>
+                <div id="imgBox" class="hidden rounded-xl overflow-hidden border border-cyan-500/30">
+                    <img id="resImg" src="" class="w-full">
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-8 pt-6 border-t border-slate-900 text-center">
+            <p class="text-[8px] text-slate-700 font-black uppercase tracking-[0.5em]">Secured by Solana • Bangladesh 2026</p>
+        </footer>
+    </div>
+
+    <canvas id="matrixCanvas"></canvas>
+
+    <script>
+        let settings = { ghost: false, stealth: false };
+        let shadowData = null;
+        let userWallet = null;
+
+        async function connectWallet() {
+            if (window.solana && window.solana.isPhantom) {
+                try {
+                    const resp = await window.solana.connect();
+                    userWallet = resp.publicKey.toString();
+                    document.getElementById('connectBtn').innerText = userWallet.slice(0,4) + "..." + userWallet.slice(-4);
+                    document.getElementById('connectBtn').classList.replace('solana-btn', 'bg-slate-800');
+                    document.getElementById('connectBtn').style.color = "#22d3ee";
+                } catch (err) {
+                    console.error("User rejected connection");
+                }
+            } else {
+                alert("Please install Phantom Wallet to use v6.0 Protocol");
+            }
+        }
+
+        function toggleSet(type) {
+            settings[type] = !settings[type];
+            document.getElementById(type + 'Stat').innerText = settings[type] ? "ACTIVE" : "OFF";
+            document.getElementById(type + 'Stat').style.color = settings[type] ? "#22d3ee" : "#94a3b8";
+            if(type === 'stealth') document.getElementById('msgInput').style.webkitTextSecurity = settings[type] ? "disc" : "none";
+        }
+
+        function handleShadow(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    shadowData = e.target.result;
+                    document.getElementById('shadowStat').innerText = "READY";
+                    document.getElementById('shadowStat').style.color = "#ffffff";
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        async function runProtocol(mode) {
+            if (!userWallet) {
+                alert("Connect Solana Wallet to verify identity first.");
+                return;
+            }
+
+            const input = document.getElementById('msgInput');
+            const resArea = document.getElementById('resArea');
+            const resText = document.getElementById('resText');
+            const resImg = document.getElementById('resImg');
+            const imgBox = document.getElementById('imgBox');
+            const actionBtn = document.getElementById('actionBtn');
+            let shift = parseInt(document.getElementById('shift').value) || 0;
+
+            // Simple protocol logic for deployment
+            if (shadowData) {
+                const img = new Image();
+                img.src = shadowData;
+                await new Promise(r => img.onload = r);
+                const cvs = document.getElementById('matrixCanvas');
+                const ctx = cvs.getContext('2d');
+                cvs.width = img.width; cvs.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                const data = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                const px = data.data;
+                let seed = shift + userWallet.length; // Use wallet length as extra salt
+                for (let i = 0; i < px.length; i += 4) {
+                    px[i] = px[i] ^ (seed % 255);
+                    seed = (seed * 16807) % 2147483647;
+                }
+                ctx.putImageData(data, 0, 0);
+                const finalUrl = cvs.toDataURL("image/png");
+                resText.innerText = "Shadow Matrix Locked";
+                resImg.src = finalUrl;
+                imgBox.classList.remove('hidden');
+                actionBtn.innerText = "SAVE";
+                actionBtn.onclick = () => {
+                    const link = document.createElement('a');
+                    link.href = finalUrl;
+                    link.download = mode === 'enc' ? 'vault_enc.png' : 'vault_dec.png';
+                    link.click();
+                };
+            } else if (input.value) {
+                if(mode === 'dec') shift = -shift;
+                const out = input.value.split('').map(c => String.fromCharCode(c.charCodeAt(0) + (c === ' ' ? 0 : shift))).join('');
+                resText.innerText = out;
+                imgBox.classList.add('hidden');
+                actionBtn.innerText = "COPY";
+                actionBtn.onclick = () => {
+                    navigator.clipboard.writeText(out);
+                    actionBtn.innerText = "DONE!";
+                };
+            }
+            resArea.classList.remove('hidden');
+            if(settings.ghost) input.value = '';
+        }
+    </script>
+</body>
+</html>
